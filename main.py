@@ -613,22 +613,25 @@ def calcTimestamp(fps: float, count: int):
 #     scoreBoard = extractScoreBoard(image)
 #     detectText(scoreBoard)
 
+def run_app():
+    print("please select a video file")
+    video_path = select_video_file()
+    sampledFrames = processFrames(path= video_path, sampleTime= 600)
+    matchData = detectChangesAndSplitFrames(sampledFrames)
+    selected_clips_idx = select_clips(matchData)
+    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET )
+    print(f'clip intervals: {clipIntervals}')
+    output_dir_path = select_directory()
+    output_path = os.path.join(output_dir_path, "hightlight_reel.mp4")
+    generateReel(src_path=video_path, dst_path=output_path, subclipIntervals=clipIntervals)
 
-print("please select a video file")
-video_path = select_video_file()
-sampledFrames = processFrames(path= video_path, sampleTime= 600)
-matchData = detectChangesAndSplitFrames(sampledFrames)
-selected_clips_idx = select_clips(matchData)
-clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET )
-print(f'clip intervals: {clipIntervals}')
-output_dir_path = select_directory()
-output_path = os.path.join(output_dir_path, "hightlight_reel.mp4")
-generateReel(src_path=video_path, dst_path=output_path, subclipIntervals=clipIntervals)
+    print(f"Selected Points indices: {selected_clips_idx}")
 
-print(f"Selected Points indices: {selected_clips_idx}")
+    print(f"Number of sets: {len(matchData)}")
 
-print(f"Number of sets: {len(matchData)}")
+    print(f"Number of games: {sum([len(set) for set in matchData])}")
 
-print(f"Number of games: {sum([len(set) for set in matchData])}")
+    print(f"Number of points: {sum([ sum([len(game) for game in set]) for set in matchData])}")
 
-print(f"Number of points: {sum([ sum([len(game) for game in set]) for set in matchData])}")
+
+run_app()
