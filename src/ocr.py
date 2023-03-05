@@ -1,180 +1,130 @@
 import cv2
 import pytesseract
 import numpy as np
+import keras_ocr
+import time
+
+# Load the Keras-OCR model
+pipeline = keras_ocr.pipeline.Pipeline()
+
+def kerasocrPredict(images, isSingleChannel=True):
+
+    if isSingleChannel == True:
+        images = [cv2.merge((image, image, image)) for image in images]
+
+    predictions = pipeline.recognize(images)
+
+    return ["".join([prediction[0] for prediction in predictions[i]]) for i in range(len(predictions)) ]
 
 
-def detectText(image):
-    # convert the image into grayscale
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+def detectText(images):
+    results = {'tl':[], 'tr':[], 'bl':[], 'br':[]}
+    edges = []
+    for section in ('tl', 'tr', 'bl', 'br'):
+        bin_iois = []
+        for image in images:
+            # cv2.imshow("scr_brd", image)
+            # cv2.waitKey(5)
 
-    # resize image
-    resizedWidth = 450
-    resizedHeight = 100
-    resized_image = cv2.resize(gray_image, (resizedWidth, resizedHeight))
-     
-    # Perform adaptive thresholding
-    thresh_image = cv2.adaptiveThreshold(resized_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            # resize image
+            resizedWidth = 667
+            resizedHeight = 150
+            resized_image = cv2.resize(image, (resizedWidth, resizedHeight))
+             
+            # convert the image into grayscale
+            gray_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2GRAY)
 
-    blur_image = cv2.GaussianBlur(resized_image, (3,3), 0.01)
-    canny_image = cv2.Canny(blur_image, 115, 150)
+            # Perform adaptive thresholding
+            thresh_image = cv2.adaptiveThreshold(gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
-    erodeKernel = np.ones((3,3), np.uint8)
+            blur_image = cv2.GaussianBlur(gray_image, (3,3), 0.01)
 
-    eroded_thresh_image = cv2.dilate(thresh_image, erodeKernel, iterations=1)
-    right_canny_image = cv2.bitwise_and(canny_image, cv2.bitwise_not(eroded_thresh_image), mask=None)
+            canny_image = cv2.Canny(blur_image, 115, 150)
 
-    # Define the kernel for dilation
-    kernel = np.ones((5,5), np.uint8)
+            # Find the X-coordinate of the edge
+            edgeXCoord = int (findScoreBoardEdge2(canny_image) * resizedWidth)
 
-    # Perform dilation
-    dilated_image = cv2.dilate(canny_image, kernel, iterations=1)
-    final_image = cv2.bitwise_and(thresh_image, dilated_image, mask=None)
-    final_image_inv = cv2.bitwise_and(cv2.bitwise_not(thresh_image), dilated_image, mask=None)
-    thresh_image_inv = cv2.bitwise_not(thresh_image)
-    some_image = cv2.bitwise_and(final_image_inv, thresh_image_inv, mask=None)
+            # define the region of interest
+            roiWidth  = int (0.155 * resizedWidth)
 
-    # Find the X-coordinate of the edge
-    edgeXCoord = int (findScoreBoardEdge2(canny_image) * resized_image.shape[1])
+            # All
+            # roi = (((edgeXCoord - roiWidth),0 ),(edgeXCoord,resizedHeight))
 
-    # Draw the edge line
-    cv2.line(resized_image, (edgeXCoord, 0), (edgeXCoord, resized_image.shape[0]), (255, 255, 0))
+            # Top
+            # roi = (((edgeXCoord - roiWidth),0 ),(edgeXCoord,resizedHeight))
+
+            # Top Left
+            if section == 'tl':
+                roi = (((edgeXCoord - roiWidth),0 ),(edgeXCoord - roiWidth // 2,resizedHeight // 2)) # (tl(width, height), br(width, height))
+            
+            #Top Right
+            if section == 'tr':
+                roi = (((edgeXCoord  - roiWidth // 2),0 ),(edgeXCoord ,resizedHeight // 2))
+            
+            # Bottom Left
+            if section == 'bl':
+                roi = (((edgeXCoord - roiWidth), resizedHeight // 2 ),(edgeXCoord - roiWidth // 2,resizedHeight)) # (tl(width, height), br(width, height))
+
+            # Bottom Right
+            if section == 'br':
+                roi = (((edgeXCoord  - roiWidth // 2),resizedHeight // 2 ),(edgeXCoord ,resizedHeight))
+            
+            # cv2.line(resized_image, (edgeXCoord, 0), (edgeXCoord, resizedHeight),(255, 255, 0), 3)
+
+            # extract image of interest
+            # ioi = resized_image[roi[0][1]: roi[1][1], roi[0][0]: roi[1][0]]
+            ioi = gray_image[roi[0][1]: roi[1][1], roi[0][0]: roi[1][0]]
+
+            # if section == 'tl' or section == 'bl':
+            #     _ , bin_ioi = cv2.threshold(ioi, 120, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+            
+            # bin_ioi = cv2.adaptiveThreshold(ioi, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            
+            bin_ioi = None
+
+            if section == 'tr' or section == 'br':
+                bin_ioi = ioi
+
+            if section == 'tl' or section == 'bl':
+                bin_ioi = cv2.bitwise_not(ioi) 
+
+            # This is done only once
+            if section == 'tr':
+                edges.append(edgeXCoord)
+
+            if section == 'bl':
+                cv2.imshow("img", bin_ioi)
+                cv2.waitKey()
+
+            cv2.destroyAllWindows()
+
+            bin_iois.append(bin_ioi)
 
 
-    # get the xcoordinate of the line dividing the points from sets
-    widthOfPointsSection = 30
-    whiteBandWidth = 10
-    padding = 10
-    dividerLineXCoord = edgeXCoord - widthOfPointsSection
+        # img = bin_ioi[0 : int (bin_ioi.shape[0] / 2), 0 : int (bin_ioi.shape[1] / 2)]
+        # cv2.imshow("img", img)
+        # cv2.waitKey()
+        # cv2.destroyAllWindows()
 
-    # remove white band
-    try:
-        final_image[:, (dividerLineXCoord - whiteBandWidth) : dividerLineXCoord] = np.zeros((resizedHeight, whiteBandWidth),  dtype=np.uint8)
-    except:
-        print("Unable to remove white band 1")
-    try:
-        final_image_inv[:, (edgeXCoord - 3) : edgeXCoord + 5] = np.zeros((resizedHeight,8),  dtype=np.uint8)
-    except:
-        print("unable to reove white band 2")
+        # result = pytesseract.image_to_string(img)
+        keras_bin_images = []
+        batchSize = 20
 
+        # organize the binary images in groups of "batch size" or less
+        keras_bin_images = [bin_iois[idx - batchSize : idx ] for idx in range(1, 1 + 2 * int(len(bin_iois) / batchSize)) if idx % batchSize == 0] + [bin_iois[-(len(bin_iois) % batchSize) : ]]
+        
 
-    section1 = final_image[:,:dividerLineXCoord]
-    section2 = final_image_inv[:,dividerLineXCoord:]
+        time1 = time.time_ns() 
+        for image_batch in keras_bin_images:
+            results[section] += kerasocrPredict(image_batch)
+        inference_time = ( time.time_ns() - time1) // 1000000000
+        
+        print(f"It took {inference_time} seconds for {len(bin_iois)} images")
+        print(f"Section {section}: {results[section]}")
 
-    ultimateImage = np.zeros((resizedHeight, resizedWidth), dtype=np.uint8)
-    ultimateImage[:,:dividerLineXCoord] = section1
-    ultimateImage[:,dividerLineXCoord:] = section2 
-
-    # pad section2
-    tempSection = np.zeros((section2.shape[0], section2.shape[1] + padding), dtype=np.uint8)
-    tempSection[:,padding:] = section2
-    section2 = tempSection
-
-
-
-    upperHalf = cv2.bitwise_not(ultimateImage[:int (ultimateImage.shape[0] / 2),:])
-    lowerHalf = cv2.bitwise_not(ultimateImage[int (ultimateImage.shape[0] / 2) : ,:])
-
-    upperHalf1 = cv2.bitwise_not(section1[:int (section1.shape[0] / 2),:])
-    lowerHalf1 = cv2.bitwise_not(section1[int (section1.shape[0] / 2) : ,:])
-
-    upperHalf2 = cv2.bitwise_not(section2[:int (section2.shape[0] / 2),:widthOfPointsSection * 2])
-    lowerHalf2 = cv2.bitwise_not(section2[int (section2.shape[0] / 2) : ,:widthOfPointsSection * 2])
+    cv2.destroyAllWindows()
     
-    # upperHalf = resized_image[:int (resized_image.shape[0] / 2),:]
-    # lowerHalf = resized_image[int (resized_image.shape[0] / 2) : ,:]
-
-    # figs, axes = plt.subplots(2,3)
-
-    # axes[0][0].set_title("utlimate text")
-    # axes[0][0].imshow(ultimateImage)
-    # axes[0][1].set_title("section 1")
-    # axes[0][1].imshow(section1)
-    # axes[0][2].set_title("section 2")
-    # axes[0][2].imshow(section2)
-    # axes[1][0].set_title("upper half 2")
-    # axes[1][0].imshow(upperHalf2)
-
-    # plt.show()
-
-    
-    upperText = [pytesseract.image_to_string(section) for section in [upperHalf1, upperHalf]]
-    lowerText = [pytesseract.image_to_string(section) for section in [lowerHalf1, lowerHalf]]
-
-    # upperText = kerasocrPredict([upperHalf1, upperHalf])
-    # lowerText = kerasocrPredict([lowerHalf1, lowerHalf])
-
-    print(f"upper raw text: {repr(upperText)}, \nlower raw text: {repr(lowerText)}")
-
-    upperSetDigits = [s for s in "".join(str.split(upperText[0])) if s.isdigit()] 
-    lowerSetDigits = [s for s in "".join(str.split(lowerText[0])) if s.isdigit()] 
-    print(f"upper: {upperSetDigits} \nlower: {lowerSetDigits}")
-
-    upperPointDigits = [s for s in "".join(str.split(upperText[1])) if s.isdigit()] 
-    lowerPointDigits = [s for s in "".join(str.split(lowerText[1])) if s.isdigit()] 
-
-    for d in upperSetDigits:
-        if d in upperPointDigits:
-            upperPointDigits.remove(d)
-
-    for d in lowerSetDigits:
-        if d in lowerPointDigits:
-            lowerPointDigits.remove(d)
-
-    print(f"upper Points: {''.join(upperPointDigits)} \nlower Points: {''.join(lowerPointDigits)}")
-
-    up = ["".join(upperSetDigits), ''.join(upperPointDigits)]
-    down = ["".join(lowerSetDigits), ''.join(lowerPointDigits)]
-
-
-    print(f"up: {up} \ndown: {down}")
-
-
-    # reader = easyocr.Reader(['en'])
-    # results = reader.readtext(lowerHalf)
-    # for result in results:
-    #     print(result[1])
-
-    return [up, down, edgeXCoord] # will use edgetXCoord to detect changes in sets
-
-
-
-def findScoreBoardEdge1(image):
-
-    moments = cv2.moments(image)
-
-    # Calculate centroid of white pixels
-    cX = int(moments["m10"] / moments["m00"])
-    cY = int(moments["m01"] / moments["m00"])
-
-    edgeXCoordRel = 2 * cX / image.shape[1]
-
-    print(f"Max distance: {cX}")
-
-    return edgeXCoordRel
-
-
-# Method 2 using minArea bounding rect
-def findScoreBoardEdge2(canny_image):
-
-    # Method 2 using min bounding rect
-
-    height, width = canny_image.shape
-
-    # assert(channels == 1)
-
-    max_dist = 0
-    # Loop over each row and each column of the image
-    for y in range(height):
-        for x in range(width):
-            # Get the color of the pixel at (x, y)
-            # check if the pixel is white
-            if canny_image[y][x] == 255: 
-                if x > max_dist:
-                    max_dist = x
-
-    edgeXCoordRel = max_dist / canny_image.shape[1]
-    print(f"Max distance: {max_dist}")
-    return edgeXCoordRel
+    return [(results['tl'][i], results['tr'][i], results['bl'][i], results['br'][i], edges[i]) for i in range(len(results['tl']))]
 
 
 # Takes the path to the video and processes the various frames
@@ -191,7 +141,7 @@ def extractScoreBoard(image):
     topLeftRel = (0.017, 0.842) 
 
     # relative coordinates of the bottom right corner of the scoreboard
-    bottomRightRel = (0.364, 0.958)
+    bottomRightRel = (0.364, 0.95)
 
     # extracting image dimensions
     width = image.shape[1]
@@ -205,33 +155,27 @@ def extractScoreBoard(image):
     # extract the score board 
     scoreBoard = image[topLeft[1] : bottomRight[1], topLeft[0] : bottomRight[0],:]
 
-    # cv2.imshow("Extracted score board", scoreBoard)
-    # cv2.waitKey()
-    # cv2.destroyAllWindows()
-
     return scoreBoard
 
 
- 
-
 # Method 1 using white pixel centroid
-# def findScoreBoardEdge1(image):
+def findScoreBoardEdge1(image):
 
-#     moments = cv2.moments(image)
+    moments = cv2.moments(image)
 
-#     # Calculate centroid of white pixels
-#     cX = int(moments["m10"] / moments["m00"])
-#     cY = int(moments["m01"] / moments["m00"])
+    # Calculate centroid of white pixels
+    cX = int(moments["m10"] / moments["m00"])
+    cY = int(moments["m01"] / moments["m00"])
 
-#     edgeXCoordRel = 2 * cX / image.shape[1]
+    edgeXCoordRel = 2 * cX / image.shape[1]
 
-#     print(f"Max distance: {cX}")
+    # print(f"Max distance: {cX}")
 
-#     return edgeXCoordRel
+    return edgeXCoordRel
 
 
 # Method 2 using minArea bounding rect
-# def findScoreBoardEdge2(canny_image):
+def findScoreBoardEdge2(canny_image):
 
     # Method 2 using min bounding rect
 
@@ -240,6 +184,7 @@ def extractScoreBoard(image):
     # assert(channels == 1)
 
     max_dist = 0
+
     # Loop over each row and each column of the image
     for y in range(height):
         for x in range(width):
@@ -250,6 +195,27 @@ def extractScoreBoard(image):
                     max_dist = x
 
     edgeXCoordRel = max_dist / canny_image.shape[1]
-    print(f"Max distance: {max_dist}")
+
+    # print(f"Max distance: {max_dist}")
     return edgeXCoordRel
 
+
+images = []
+paths_idx = [i for i in range(15)]
+
+images = [cv2.imread(f"images/{idx + 1}.png") for idx in range(20)]
+scoreboards  =  [extractScoreBoard(image) for image in images]
+detectedTexts = detectText(scoreboards)
+print(detectedTexts[1])
+# cv2.imshow("Sample image", image)
+# cv2.waitKey()
+# cv2.destroyAllWindows()
+
+
+# scoreboard = extractScoreBoard(image)
+# cv2.imshow('score board', scoreboard)
+# cv2.waitKey()
+# cv2.destroyAllWindows()
+
+
+# detectText(scoreboard)
