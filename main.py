@@ -4,9 +4,7 @@ import time
 import os
 import cv2
 import numpy as np
-import pytesseract
 import matplotlib.pyplot as plt
-import keras_ocr
 import sys
 sys.path.insert(1, 'src')
 import frame as fr
@@ -190,7 +188,6 @@ def getSampleFrames(path, numberOfSamples=5, samplePeriod=5): # sample period de
     fps = cam.get(cv2.CAP_PROP_FPS)
     print(f"Frames per second: {fps}")
 
-    frameCount = 0
     sampleCount = 1
     while True:
         ret, frame = cam.read()
