@@ -98,6 +98,11 @@ def processFrames(path: str, sampleTime: int = DEFAULT_SAMPLE_TIME, samplePeriod
         sampleCount = 0
 
         print("Started processing sample frames")
+
+        # holds the data of the previous frame
+        # initialized to zero everywhere
+        prevFrameData = [['0', '0'], ['0', '0'], 0]
+
         while True:
             ret, frame = cam.read()
             if not ret:
@@ -112,11 +117,18 @@ def processFrames(path: str, sampleTime: int = DEFAULT_SAMPLE_TIME, samplePeriod
 
                 cv2.imshow(f"Sample: {sampleCount} of {numberOfSamples}",frame)
                 cv2.waitKey(10)
+
+                newFrameData = ocr.extractFrameData(frame, ocr=OCR)
+
+                # ignore corrupt data
+                if newFrameData[0] is None:
+                    newFrameData = prevFrameData
+
                 newFrame = fr.Frame(
                     count=frameCount,
                     timestamp= calcTimestamp(fps, frameCount),
                     fps=fps,
-                    data=ocr.extractFrameData(frame),
+                    data=newFrameData,
                     image = frame
                 )
 

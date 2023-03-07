@@ -5,9 +5,9 @@ import math
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-print("Initializing OCR Engine")
-ocr = paddleocr.PaddleOCR(lang='en')
-print("Paddle OCR object successfully created")
+# print("Initializing OCR Engine")
+# ocr = paddleocr.PaddleOCR(lang='en')
+# print("Paddle OCR object successfully created")
 
 def extractScoreBoard(image):
     # relative coordinates of the top left corner of the scoreboard
@@ -86,7 +86,7 @@ def findScoreBoardEdge(image):
     return edgeXCoordRel
   
 
-def extractFrameData(src):
+def extractFrameData(src, ocr):
     image = extractScoreBoard(src)
     original = image
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -112,17 +112,21 @@ def extractFrameData(src):
     return [up, down, edge_x]
 
 
-file_names = os.listdir(path='images/')
-for i, name in enumerate(file_names):
-    full_path = os.path.join('images/', name)
-    image = cv2.imread(full_path)
-    data = extractFrameData(image)
-    print(f"{i + 1}: {name}")
-    print(f" up: {data[0]} \n down: {data[1]} \n edge_x: {data[2]} \n")
-    cv2.imshow("image", image)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+# test function
+def test():
+    file_names = os.listdir(path='images/')
+    for i, name in enumerate(file_names):
+        full_path = os.path.join('images/', name)
+        image = cv2.imread(full_path)
+        data = extractFrameData(image)
+        print(f"{i + 1}: {name}")
+        print(f" up: {data[0]} \n down: {data[1]} \n edge_x: {data[2]} \n")
+        cv2.imshow("image", image)
+        cv2.waitKey()
+        cv2.destroyAllWindows()
 
+
+# test()
 
 
 
