@@ -6,18 +6,17 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
-
 sys.path.insert(1, 'src')
-
-import frame as fr
+import models.frame as fr
 import moviepy.editor as mp
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.compositing.concatenate import concatenate_videoclips
 import ocr
+import paddleocr
 
-# Load the Keras-OCR model
 
-# pipeline = keras_ocr.pipeline.Pipeline()
+# Load paddle ocr
+OCR = paddleocr.PaddleOCR(lang='en')
 
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
@@ -44,7 +43,6 @@ def select_directory():
 
     # Return the selected directory path
     return directory_path
-
 
 def getSampleFrames(path, numberOfSamples=5, samplePeriod=5): # sample period defines how often video frames should be sampled.
     cam = cv2.VideoCapture(path)
@@ -74,15 +72,12 @@ def getSampleFrames(path, numberOfSamples=5, samplePeriod=5): # sample period de
         frameCount += 1
 
 
-def kerasocrPredict(images, isSingleChannel=True):
-
     if isSingleChannel == True:
         images = [cv2.merge((image, image, image)) for image in images]
 
     predictions = pipeline.recognize(images)
 
     return ["".join([prediction[0] for prediction in predictions[i]]) for i in range(len(predictions)) ]
-
 
 def processFrames(path: str, sampleTime: int = DEFAULT_SAMPLE_TIME, samplePeriod:int=15):
         sampledFrames = []
