@@ -20,8 +20,9 @@ OCR = paddleocr.PaddleOCR(lang='en')
 
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
-ODD_GAME_TIME_OFFSET = 90
+ODD_GAME_TIME_OFFSET = 70
 DEFAULT_SAMPLE_TIME = 120
+SAMPLE_PERIOD = 5
 
 def select_video_file():
     root = tk.Tk()
@@ -115,14 +116,21 @@ def processFrames(path: str, sampleTime: int = DEFAULT_SAMPLE_TIME, samplePeriod
                 except:
                     pass
 
-                cv2.imshow(f"Sample: {sampleCount} of {numberOfSamples}",frame)
-                cv2.waitKey(10)
+                # cv2.imshow(f"Sample: {sampleCount} of {numberOfSamples}",frame)
+                # cv2.waitKey(10)
 
                 newFrameData = ocr.extractFrameData(frame, ocr=OCR)
+                
 
                 # ignore corrupt data
                 if newFrameData[0] is None:
                     newFrameData = prevFrameData
+                else:
+                    # update previous frame data
+                    prevFrameData = newFrameData
+
+
+                print(f"edge_x: {newFrameData[2]}")
 
                 newFrame = fr.Frame(
                     count=frameCount,
@@ -153,6 +161,7 @@ def hasChanged_set(prevFrame: fr.Frame, currentFrame: fr.Frame):
     prevEdgeXCoord = prevFrame.data[2]
     currentEdgeXCoord = currentFrame.data[2]
     if abs(prevEdgeXCoord - currentEdgeXCoord) >= SET_CHANGE_THRESH:
+        print(f"Has changed set from: {prevEdgeXCoord} to {currentEdgeXCoord}")
         return True
     else:
         return False
@@ -184,7 +193,7 @@ def detectChangesAndSplitFrames(sampledFrames):
     for i in range(1, len(sampledFrames)):
         if hasChanged_set(sampledFrames[i - 1], sampledFrames[i]):
 
-            # ADD THE CLOSING FREAME OF THE LASTEST POINT
+            # ADD THE CLOSING FRAME OF THE LASTEST POINT
             latestSet = sets[len(sets) - 1]
             latestGame = latestSet[len(latestSet) - 1]
             latestPoint = latestGame[len(latestGame) - 1]
@@ -201,7 +210,7 @@ def detectChangesAndSplitFrames(sampledFrames):
 
         if hasChanged_game(sampledFrames[i - 1], sampledFrames[i]):
 
-            # ADD THE CLOSING FREAME OF THE LAST POINT
+            # ADD THE CLOSING FRAME OF THE LAST POINT
             latestSet = sets[len(sets) - 1]
             latestGame = latestSet[len(latestSet) - 1]
             latestPoint = latestGame[len(latestGame) - 1]
@@ -379,22 +388,62 @@ def generateReel(src_path: str, dst_path: str, subclipIntervals: list):
 # The first parameter data i.e organized list of sets
 # The second parameter is subclipIndices i.e the 
 # it returns a sorted list of clip interval tuples i.e [(start_time, stop_time)]
-def generateSubclipIntervals(data: list, subclipIndices: list, pointOffset: int = 0):
+def generateSubclipIntervals(data: list, subclipIndices: list, pointOffset: int = 15, oddGameOffset: int = 70, samplePeriod: int = 5):
     unsortedClipIntervals = []
     for subclipIdx in subclipIndices:
         set_idx = subclipIdx[0]
         game_idx = subclipIdx[1]
         point_idx = subclipIdx[2]
-        start_time = data[set_idx][game_idx][point_idx][0].timestamp 
-        stop_time = data[set_idx][game_idx][point_idx][1].timestamp
-
-        if start_time + pointOffset - stop_time > 5:
-            unsortedClipIntervals.append((start_time + pointOffset, stop_time))
-        else:
-            unsortedClipIntervals.append((start_time , stop_time))
+        startFrame = data[set_idx][game_idx][point_idx][0] 
+        stopFrame = data[set_idx][game_idx][point_idx][1]
+        (startTime, stopTime) = findEffectiveClipInterval(startFrame=startFrame, stopFrame=stopFrame, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
+        unsortedClipIntervals.append((startTime , stopTime))
     
     sortedClipIntervals = sorted(unsortedClipIntervals, key=lambda interval : interval[0])
     return sortedClipIntervals
+
+
+def findEffectiveClipInterval(startFrame: fr.Frame, stopFrame: fr.Frame, pointOffset: int = 15 , oddGameOffset: int = 70, samplePeriod: int = 5):
+    start_time = startFrame.timestamp 
+    stop_time = stopFrame.timestamp
+    is_odd_game = False
+    _odd_game_offset = 0
+    _point_offset = 0
+
+    try:
+        player1GamesWonInSet = int(startFrame.data[0][0]) # Number of games won by player 1 in the current set
+        player2GamesWonInSet = int(startFrame.data[1][0]) # Number of games won by player 2 in the current set
+
+        # check if total number of games in set is odd
+        # or a new set is starting
+        is_odd_game = (player1GamesWonInSet + player2GamesWonInSet) % 2  is 1 or (player1GamesWonInSet == 0 and player2GamesWonInSet == 0)
+    except:
+        is_odd_game = False
+
+    # if is_odd_game:
+    #     # if oddGameOffset -  3 * samplePeriod // 2 >= 0:
+    #         _odd_game_offset = oddGameOffset + 3 * samplePeriod // 2
+    # else:
+    #     # if pointOffset - samplePeriod >= 0:
+    #         _point_offset = pointOffset + samplePeriod
+
+    if is_odd_game:
+        _odd_game_offset = oddGameOffset
+    else:
+        _point_offset = pointOffset
+
+    clipInterval = stop_time - start_time
+
+    if _odd_game_offset >= clipInterval:
+        if clipInterval > 30:
+            _odd_game_offset = clipInterval - 30 
+        else:
+            _odd_game_offset = 0
+    
+    if _point_offset >= clipInterval:
+        _point_offset = 0
+    
+    return (start_time + _point_offset + _odd_game_offset, stop_time)
 
 
 # Calculates and returns the timestamp of a frame given the: Frame rate (fps) and Frame number or count(count)
@@ -405,10 +454,11 @@ def calcTimestamp(fps: float, count: int):
 def run_app():
     print("please select a video file")
     video_path = select_video_file()
-    sampledFrames = processFrames(path= video_path, sampleTime= 600)
+    sampledFrames = processFrames(path= video_path, sampleTime= 1200)
+    print(f"edge_x: {[sampleFrame.data[2] for sampleFrame in sampledFrames]}")
     matchData = detectChangesAndSplitFrames(sampledFrames)
     selected_clips_idx = select_clips(matchData)
-    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET )
+    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET, oddGameOffset=ODD_GAME_TIME_OFFSET,samplePeriod=SAMPLE_PERIOD )
     print(f'clip intervals: {clipIntervals}')
     output_dir_path = select_directory()
     output_path = os.path.join(output_dir_path, "hightlight_reel.mp4")
