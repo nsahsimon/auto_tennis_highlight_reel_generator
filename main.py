@@ -7,19 +7,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 sys.path.insert(1, 'src')
-# import models.frame as fr
 import moviepy.editor as mp
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.compositing.concatenate import concatenate_videoclips
-# import ocr
 import paddleocr
 from PIL import Image, ImageDraw, ImageFont
 
+SET_CHANGE_THRESH = 10
+POINT_TIME_OFFSET = 15
+ODD_GAME_TIME_OFFSET = 70
+DEFAULT_SAMPLE_TIME = 2400
+DEFAULT_SAMPLE_PERIOD = 5
 
 
 # Frame class
-
-
 class Frame:
     count = None # the position of the frame in the list of all frames in the video
     timestamp = None # the timestamp of the frame given the current frame rate
@@ -42,7 +43,7 @@ class Frame:
 
 
 
-# OCR LOGIC
+# IMPORTANT OCR FUNCTIONS
 
 def extractScoreBoard(image):
     # relative coordinates of the top left corner of the scoreboard
@@ -167,11 +168,6 @@ def test(self):
 # Load paddle ocr
 OCR = paddleocr.PaddleOCR(lang='en')
 
-SET_CHANGE_THRESH = 10
-POINT_TIME_OFFSET = 15
-ODD_GAME_TIME_OFFSET = 70
-DEFAULT_SAMPLE_TIME = 120
-SAMPLE_PERIOD = 5
 
 def select_video_file():
     root = tk.Tk()
@@ -596,11 +592,11 @@ def calcTimestamp(fps: float, count: int):
 def run_app():
     print("please select a video file")
     video_path = select_video_file()
-    sampledFrames = processFrames(path= video_path, sampleTime= 1200)
+    sampledFrames = processFrames(path= video_path, sampleTime= DEFAULT_SAMPLE_TIME, samplePeriod=DEFAULT_SAMPLE_PERIOD)
     print(f"edge_x: {[sampleFrame.data[2] for sampleFrame in sampledFrames]}")
     matchData = detectChangesAndSplitFrames(sampledFrames)
     selected_clips_idx = select_clips(matchData)
-    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET, oddGameOffset=ODD_GAME_TIME_OFFSET,samplePeriod=SAMPLE_PERIOD )
+    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET, oddGameOffset=ODD_GAME_TIME_OFFSET,samplePeriod=DEFAULT_SAMPLE_PERIOD )
     print(f'clip intervals: {clipIntervals}')
     output_dir_path = select_directory()
     output_path = os.path.join(output_dir_path, "hightlight_reel.mp4")
