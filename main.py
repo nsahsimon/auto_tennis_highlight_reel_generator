@@ -16,8 +16,8 @@ from PIL import Image, ImageDraw, ImageFont
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
 ODD_GAME_TIME_OFFSET = 70
-DEFAULT_SAMPLE_TIME = 2400
-DEFAULT_SAMPLE_PERIOD = 5
+DEFAULT_SAMPLE_TIME = 1200
+DEFAULT_SAMPLE_PERIOD = 8
 
 
 # Frame class
@@ -40,7 +40,6 @@ class Frame:
     
     def setEdge_x(self, edge_x):
         self.data[2] = edge_x
-
 
 
 # IMPORTANT OCR FUNCTIONS
@@ -612,14 +611,4 @@ def run_app():
 
 
 run_app()
-
-
-
-
-
-
-
-
-
-
 
