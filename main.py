@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
 import time
 import os
@@ -16,8 +17,9 @@ from PIL import Image, ImageDraw, ImageFont
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
 ODD_GAME_TIME_OFFSET = 70
-DEFAULT_SAMPLE_TIME = 1200
-DEFAULT_SAMPLE_PERIOD = 8
+DEFAULT_SAMPLE_TIME = 300
+DEFAULT_SAMPLE_PERIOD = 15
+video_path = None
 
 
 # Frame class
@@ -162,6 +164,133 @@ def test(self):
 
 
 
+# ui functions
+
+def get_user_input():
+
+    user_input = {}
+    
+    # Create the main window
+    window = tk.Tk()
+    window.title("Input Information")
+    # Set the size of the window to 500x300 pixels
+    window.geometry("512x640")
+
+    # Get source video file
+
+    src_video_entry = tk.Entry(window, textvariable=tk.StringVar(value="No file selected"), width=50, state=tk.DISABLED)
+    src_video_entry.pack()
+    def choose_src_file():
+        video_file_path = select_video_file()
+        user_input['src_file'] = video_file_path
+        src_video_entry.config(textvariable=tk.StringVar(value=f"{video_file_path}"))
+    submit_button = tk.Button(window, text="Choose a video", command=choose_src_file)
+    submit_button.pack(pady=10)
+
+
+    # Create the labels and text fields for each input
+    point_offset_label = tk.Label(window, text="By how many seconds should the start of each point be offset? (Seconds): ")
+    point_offset_label.pack()
+    point_offset_entry = tk.Entry(window, textvariable=tk.StringVar(value=f"{POINT_TIME_OFFSET}"))
+    point_offset_entry.pack(pady=20)
+
+    odd_offset_label = tk.Label(window, text="By how many seconds should the start of each odd game offset? (Seconds): ")
+    odd_offset_label.pack()
+    odd_offset_entry = tk.Entry(window, textvariable=tk.StringVar(value=f"{ODD_GAME_TIME_OFFSET}"))
+    odd_offset_entry.pack(pady=20)
+
+    video_duration_label = tk.Label(window, text="What Length of the video do you want to be processed? (Seconds): ")
+    video_duration_label.pack()
+    video_duration_entry = tk.Entry(window, textvariable=tk.StringVar(value=f"{DEFAULT_SAMPLE_TIME}"))
+    video_duration_entry.pack(pady=20)
+
+    sampling_period_label = tk.Label(window, text="After how many seconds should the video frames be sampled? (Seconds) : ")
+    sampling_period_label.pack()
+    sampling_period_label = tk.Label(window, text="(Recommended: 7 secs): ")
+    sampling_period_label.pack()
+    sampling_period_entry = tk.Entry(window, textvariable=tk.StringVar(value=f"{DEFAULT_SAMPLE_PERIOD}"))
+    sampling_period_entry.pack(pady=20)
+
+    dst_video_entry = tk.Entry(window, textvariable=tk.StringVar(value="No Folder selected"), width=50,state=tk.DISABLED )
+    dst_video_entry.pack()
+    def choose_output_dir():
+        output_directory = select_directory()
+        user_input['dst_directory'] = output_directory
+        dst_video_entry.config(textvariable=tk.StringVar(value=f"{output_directory}"))
+    submit_button = tk.Button(window, text="Choose output directory", command=choose_output_dir)
+    submit_button.pack(pady=10)
+
+    def run_app_local():
+        run_app(user_input=user_input)
+        progress_bar.stop()
+        window.destroy()
+
+    def start_background_process():
+        # Disable the submit button and text fields
+        submit_button.config(state=tk.DISABLED)
+        point_offset_entry.config(state=tk.DISABLED)
+        odd_offset_entry.config(state=tk.DISABLED)
+        video_duration_entry.config(state=tk.DISABLED)
+        sampling_period_entry.config(state=tk.DISABLED)
+
+        tk.Label(window, text="Processing video. Please wait....").pack(pady=20)
+
+        # Set up the progress bar
+        global progress_bar
+        progress_bar = ttk.Progressbar(window, orient="horizontal",maximum=100, mode='indeterminate')
+        progress_bar.pack(pady=20)
+        progress_bar.start()
+        window.after(5000, lambda : run_app_local())
+
+        # Start the background process
+        # For demonstration purposes, we'll just sleep for 5 seconds here
+        # In a real program, you would do some actual work here
+
+
+
+    def submit():
+        # Get the values from the text fields and convert them to integers
+        user_input["point_offset"] = int(point_offset_entry.get())
+        if user_input["point_offset"] < 1:
+            print("Invalid point offset")
+            return
+        
+        user_input["odd_game_offset"] = int(odd_offset_entry.get())
+        if user_input["odd_game_offset"] < 1:
+            print("Invalid odd game offset")
+            return
+        
+        user_input["video_duration"] = int(video_duration_entry.get())
+        if user_input["video_duration"] < 1:
+            print("Invalid video duration")
+            return
+
+        user_input["sampling_period"] = int(sampling_period_entry.get())
+        if user_input["sampling_period"] < 1:
+            print("Invalid sample period")
+            return
+
+        if dst_video_entry.get().lower() == "no folder selected" or src_video_entry.get().lower() == "no file selected":
+            print("Invalid point video source file or destination folder")
+            return
+
+        # Start the background process
+        start_background_process()
+
+    # Create the submit button
+    submit_button = tk.Button(window, text="Submit", command=submit)
+    submit_button.pack()
+
+    # Run the window
+    window.mainloop()
+
+    # Return the user input as a dictionary
+    return user_input
+
+
+
+
+
 
 
 # Load paddle ocr
@@ -284,6 +413,8 @@ def processFrames(path: str, sampleTime: int = DEFAULT_SAMPLE_TIME, samplePeriod
                 break
 
             frameCount += 1
+
+
 
         print(f"Video successfully processed!!")
 
@@ -588,17 +719,25 @@ def calcTimestamp(fps: float, count: int):
     return int (count / fps)       
 
 
-def run_app():
-    print("please select a video file")
-    video_path = select_video_file()
-    sampledFrames = processFrames(path= video_path, sampleTime= DEFAULT_SAMPLE_TIME, samplePeriod=DEFAULT_SAMPLE_PERIOD)
+def run_app(user_input):
+
+    sampleTime = user_input['video_duration']
+    samplePeriod = user_input['sampling_period']
+    video_path = user_input['src_file']
+    output_dir_path = user_input['dst_directory']
+    pointOffset = user_input['point_offset']
+    oddGameOffset = user_input['odd_game_offset']
+
+    # print("please select a video file")
+    # video_path = select_video_file()
+    sampledFrames = processFrames( path= video_path, sampleTime= sampleTime, samplePeriod=samplePeriod)
     print(f"edge_x: {[sampleFrame.data[2] for sampleFrame in sampledFrames]}")
     matchData = detectChangesAndSplitFrames(sampledFrames)
     selected_clips_idx = select_clips(matchData)
-    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = POINT_TIME_OFFSET, oddGameOffset=ODD_GAME_TIME_OFFSET,samplePeriod=DEFAULT_SAMPLE_PERIOD )
+    clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = pointOffset, oddGameOffset=oddGameOffset,samplePeriod=samplePeriod )
     print(f'clip intervals: {clipIntervals}')
-    output_dir_path = select_directory()
-    output_path = os.path.join(output_dir_path, "hightlight_reel.mp4")
+    # output_dir_path = select_directory()
+    output_path = os.path.join(output_dir_path, "highlight_reel.mp4")
     generateReel(src_path=video_path, dst_path=output_path, subclipIntervals=clipIntervals)
 
     print(f"Selected Points indices: {selected_clips_idx}")
@@ -610,5 +749,7 @@ def run_app():
     print(f"Number of points: {sum([ sum([len(game) for game in set]) for set in matchData])}")
 
 
-run_app()
+# run_app()
+
+get_user_input()
 
