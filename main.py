@@ -346,7 +346,7 @@ def getSampleFrames(path, numberOfSamples=5, samplePeriod=5): # sample period de
         frameCount += 1
     return
 
-def processFrames(path: str, sampleTime: int = DEFAULT_SAMPLE_TIME, samplePeriod:int=15):
+def processFrames(path:str, sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int=15):
         sampledFrames = []
 
         cam = cv2.VideoCapture(path)
