@@ -13,6 +13,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.compositing.concatenate import concatenate_videoclips
 import paddleocr
 from PIL import Image, ImageDraw, ImageFont
+import math
 
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
@@ -123,6 +124,24 @@ def findScoreBoardEdge(image):
     return edgeXCoordRel
 
 
+def sortTexts(txts, boxes):
+    txt_boxes = []
+    for i, box in enumerate(boxes):
+        txt_boxes.append((txts[i],box))
+
+    # sort vertically
+    txt_boxes.sort(key=lambda txt_box: txt_box[1][0][1])
+
+    # sort the first half horizontally
+    txt_boxes[:2]  = sorted(txt_boxes[:2] , key=lambda txt_box: txt_box[1][0][0]) # Sorting in ascending order
+
+    # sort the second half horizontally
+    txt_boxes[2:] = sorted(txt_boxes[2:], key=lambda txt_box: txt_box[1][0][0]) # Sorting in ascending order
+
+    return [txt_box[0] for txt_box in txt_boxes]
+
+
+
 def extractFrameData(src, ocr):
     image = extractScoreBoard(src)
     original = image
@@ -140,7 +159,7 @@ def extractFrameData(src, ocr):
     image = cv2.resize(image, (100, 100))
     results = ocr.ocr(image)
     results = decodeResults(results)
-    txts = results['txts']
+    txts = sortTexts(results['txts'], results['boxes'])
     print(txts)
     up = None; down = None
     if len(txts) == 4:
@@ -150,12 +169,12 @@ def extractFrameData(src, ocr):
 
 
 # test function
-def test(self):
+def test():
     file_names = os.listdir(path='images/')
     for i, name in enumerate(file_names):
         full_path = os.path.join('images/', name)
         image = cv2.imread(full_path)
-        data = self.extractFrameData(image)
+        data = extractFrameData(image, ocr=OCR)
         print(f"{i + 1}: {name}")
         print(f" up: {data[0]} \n down: {data[1]} \n edge_x: {data[2]} \n")
         cv2.imshow("image", image)
@@ -295,7 +314,9 @@ def get_user_input():
 
 # Load paddle ocr
 OCR = paddleocr.PaddleOCR(lang='en')
-
+def log_data(data):
+    with os.fdopen("logs.txt", mode='w') as file:
+        file.write(f"{data} \n")
 
 def select_video_file():
     root = tk.Tk()
@@ -395,7 +416,7 @@ def processFrames(path:str, sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int
                     # update previous frame data
                     prevFrameData = newFrameData
 
-
+                print()
                 print(f"edge_x: {newFrameData[2]}")
 
                 newFrame = Frame(
@@ -752,4 +773,6 @@ def run_app(user_input):
 # run_app()
 
 get_user_input()
+
+# test()
 
