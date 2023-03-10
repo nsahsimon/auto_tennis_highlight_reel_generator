@@ -19,7 +19,7 @@ SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
 ODD_GAME_TIME_OFFSET = 70
 DEFAULT_SAMPLE_TIME = 300
-DEFAULT_SAMPLE_PERIOD = 15
+DEFAULT_SAMPLE_PERIOD = 10
 video_path = None
 
 
@@ -315,7 +315,7 @@ def get_user_input():
 # Load paddle ocr
 OCR = paddleocr.PaddleOCR(lang='en')
 def log_data(data):
-    with os.fdopen("logs.txt", mode='w') as file:
+    with open("logs.txt", 'a') as file:
         file.write(f"{data} \n")
 
 def select_video_file():
@@ -392,10 +392,14 @@ def processFrames(path:str, sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int
         prevFrameData = [['0', '0'], ['0', '0'], 0]
 
         while True:
+
             ret, frame = cam.read()
             if not ret:
                 print("Could not retrieve video frame")
                 break
+        
+            if frameCount == 0:
+                log_data(f"Resolution: ({frame.shape[0]} x {frame.shape[1]}) \n")
             
             if frameCount % int(fps * samplePeriod) == 0:
                 try:
@@ -416,7 +420,7 @@ def processFrames(path:str, sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int
                     # update previous frame data
                     prevFrameData = newFrameData
 
-                print()
+                log_data(newFrameData)
                 print(f"edge_x: {newFrameData[2]}")
 
                 newFrame = Frame(
@@ -743,11 +747,17 @@ def calcTimestamp(fps: float, count: int):
 def run_app(user_input):
 
     sampleTime = user_input['video_duration']
+    log_data(f"Sample time: {sampleTime}")
     samplePeriod = user_input['sampling_period']
+    log_data(f"Sample period: {samplePeriod}")
     video_path = user_input['src_file']
+    log_data(f"Video path: {video_path}")
     output_dir_path = user_input['dst_directory']
     pointOffset = user_input['point_offset']
+    log_data(f"point offset: {pointOffset}")
     oddGameOffset = user_input['odd_game_offset']
+    log_data(f"odd game offset: {oddGameOffset}")
+    log_data("\n")
 
     # print("please select a video file")
     # video_path = select_video_file()
