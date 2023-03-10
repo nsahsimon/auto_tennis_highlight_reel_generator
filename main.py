@@ -14,12 +14,14 @@ from moviepy.video.compositing.concatenate import concatenate_videoclips
 import paddleocr
 from PIL import Image, ImageDraw, ImageFont
 import math
+import shutil
 
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
 ODD_GAME_TIME_OFFSET = 70
 DEFAULT_SAMPLE_TIME = 300
 DEFAULT_SAMPLE_PERIOD = 10
+LOG_FILENAME = "logs.txt"
 video_path = None
 
 
@@ -315,8 +317,12 @@ def get_user_input():
 # Load paddle ocr
 OCR = paddleocr.PaddleOCR(lang='en')
 def log_data(data):
-    with open("logs.txt", 'a') as file:
+    with open(LOG_FILENAME, 'a') as file:
         file.write(f"{data} \n")
+
+def del_prev_log():
+    if os.path.exists(LOG_FILENAME):
+        os.remove(LOG_FILENAME)
 
 def select_video_file():
     root = tk.Tk()
@@ -745,7 +751,7 @@ def calcTimestamp(fps: float, count: int):
 
 
 def run_app(user_input):
-
+    del_prev_log()
     sampleTime = user_input['video_duration']
     log_data(f"Sample time: {sampleTime}")
     samplePeriod = user_input['sampling_period']
