@@ -48,7 +48,6 @@ class Frame:
 
 
 # IMPORTANT OCR FUNCTIONS
-
 def extractScoreBoard(image):
     # relative coordinates of the top left corner of the scoreboard
     topLeftRel = (0.017, 0.842) 
@@ -185,11 +184,12 @@ def test():
 
 
 
-# ui functions
+# UI functions
 
 def get_user_input():
 
     user_input = {}
+    progress_bar  = None
     
     # Create the main window
     window = tk.Tk()
@@ -205,6 +205,7 @@ def get_user_input():
         video_file_path = select_video_file()
         user_input['src_file'] = video_file_path
         src_video_entry.config(textvariable=tk.StringVar(value=f"{video_file_path}"))
+
     submit_button = tk.Button(window, text="Choose a video", command=choose_src_file)
     submit_button.pack(pady=10)
 
@@ -238,6 +239,7 @@ def get_user_input():
         output_directory = select_directory()
         user_input['dst_directory'] = output_directory
         dst_video_entry.config(textvariable=tk.StringVar(value=f"{output_directory}"))
+
     submit_button = tk.Button(window, text="Choose output directory", command=choose_output_dir)
     submit_button.pack(pady=10)
 
@@ -257,7 +259,6 @@ def get_user_input():
         tk.Label(window, text="Processing video. Please wait....").pack(pady=20)
 
         # Set up the progress bar
-        global progress_bar
         progress_bar = ttk.Progressbar(window, orient="horizontal",maximum=100, mode='indeterminate')
         progress_bar.pack(pady=20)
         progress_bar.start()
@@ -307,6 +308,140 @@ def get_user_input():
 
     # Return the user input as a dictionary
     return user_input
+
+
+# This function allows the user to select the clips which he will like to include in the selected reel
+# it takes in the organized set of Key point
+# returns a list of the indices of the selected key points or clips
+# output format :[(setIndex, gameIndex, pointIndex)]
+def select_clips(data):
+    selected_points_idx = []
+    
+    def on_set_select(set_idx):
+        global selected_set
+        selected_set = set_idx
+        
+        # Clear the games and points lists
+        games.delete(0, tk.END)
+        points.delete(0, tk.END)
+        
+        # Populate the games list
+        for game_idx in range(len(data[selected_set])):
+            first_point = data[selected_set][game_idx][0]
+            try:
+                player1_games = first_point[0].data[0][0]
+                player2_games = first_point[0].data[1][0]
+                games.insert(tk.END, f"{game_idx+1}. ({player1_games} - {player2_games})")
+            except:
+                games.insert(tk.END, f"{game_idx+1}. ('Undefined' - 'Undefined')")
+            
+        
+    def on_game_select(game_idx):
+        global selected_set, selected_game
+        selected_game = game_idx
+
+        # def get_longest_point_idx():
+        longest_point_idx = 0
+        for point_idx in range(len(data[selected_set][selected_game])):
+            point_of_interest = data[selected_set][selected_game][point_idx]
+            longest_point = data[selected_set][selected_game][longest_point_idx]
+
+            try:
+                duration_of_point_of_interest = point_of_interest[1].timestamp - point_of_interest[0].timestamp
+                duration_of_longest_point = longest_point[1].timestamp - longest_point[0].timestamp
+                if duration_of_longest_point < duration_of_point_of_interest:
+                    longest_point_idx = point_idx
+            except:
+                print("ERROR: Encountered null point at Set: {selected_set + 1}, Game: {selected_game + 1}, Point: {point_idx + 1} => {point_of_interest}")
+                log_data(f" \n\n ERROR: Encountered null point at Set: {selected_set + 1}, Game: {selected_game + 1}, Point: {point_idx + 1} => {point_of_interest}")
+                continue
+
+            # return longest_point_idx
+        
+        # Clear the points list
+        points.delete(0, tk.END)
+        
+        # Populate the points list
+        for point_idx in range(len(data[selected_set][selected_game])):
+            point_of_interest = data[selected_set][selected_game][point_idx]
+            pointStartTime = point_of_interest[0].classicTimestamp()
+            pointStopTime = point_of_interest[1].classicTimestamp()
+            player1_points = point_of_interest[0].data[0][1]
+            player2_points = point_of_interest[0].data[1][1]
+            points.insert(tk.END, f"{point_idx+1}. {'<longest>' if point_idx == longest_point_idx else ''} ({player1_points} - {player2_points}) | ({pointStartTime} - {pointStopTime})")
+
+        
+    def on_point_select(point_idx):
+        global selected_set, selected_game
+        newPoint = (selected_set, selected_game, point_idx)
+        if not newPoint in selected_points_idx:
+            selected_points_idx.append((selected_set, selected_game, point_idx))
+        
+        chosen_points.delete(0, tk.END)
+        for (set_idx, game_idx, point_idx) in selected_points_idx:
+            pointStartTime = data[set_idx][game_idx][point_idx][0].classicTimestamp()
+            pointStopTime = data[set_idx][game_idx][point_idx][1].classicTimestamp()
+            chosen_points.insert(tk.END, f"[{pointStartTime} - {pointStopTime}]")
+                
+            # pointStartTime = data[][selected_game][point_idx][0].classicTimestamp()
+            # pointStopTime = data[selected_set][selected_game][point_idx][1].classicTimestamp()
+            # chosen_points.insert(tk.END, f"Set{point[0] + 1}/Game{point[1] + 1}/Point{point[2] + 1}")
+        
+    def on_okay():
+        print("Destroying root; Exiting")
+        root.destroy()
+    
+    root = tk.Tk()
+    root.title("Select Points")
+    
+    # Create the sets, games, and points lists
+    sets = tk.Listbox(root, width=15, height=25)
+    sets_label = tk.Label(root, text="SETS")
+    games = tk.Listbox(root, width=15, height=25)
+    games_label = tk.Label(root, text="GAMES")
+    points = tk.Listbox(root, width=25, height=25)
+    points_label = tk.Label(root, text="POINTS")
+    chosen_points = tk.Listbox(root, width=25, height=25)
+    chosen_points_label = tk.Label(root, text="SELECTED POINTS")
+
+ 
+    # Populate the sets list and select the first set by default
+    for set_idx in range(len(data)):
+        sets.insert(tk.END, f"set {set_idx+1}")
+
+    selected_set = 0
+    sets.select_set(selected_set)
+    
+    # Bind the set select event
+    sets.bind("<<ListboxSelect>>", lambda e: on_set_select(sets.curselection()[0]))
+    
+    # Bind the game select event
+    games.bind("<<ListboxSelect>>", lambda e: on_game_select(games.curselection()[0]))
+    
+    # Bind the point select event
+    points.bind("<<ListboxSelect>>", lambda e: on_point_select(points.curselection()[0]))
+    
+
+    # Pack the widgets
+    sets_label.pack(padx=15, pady=15,side=tk.LEFT)
+    sets.pack(padx=15, pady=15,side=tk.LEFT)
+    games_label.pack(padx=5, pady=5,side=tk.LEFT)
+    games.pack(padx=5, pady=5,side=tk.LEFT)
+    points_label.pack(padx=5, pady=5,side=tk.LEFT)
+    points.pack(padx=5, pady=5,side=tk.LEFT)
+    chosen_points_label.pack(padx=5, pady=5,side=tk.LEFT)
+    chosen_points.pack(padx=15, pady=15,side=tk.LEFT)
+
+
+    # Create and pack the "OK" button
+    okay_button = tk.Button(root, text="OK", command=on_okay)
+    okay_button.pack(pady=5,side=tk.LEFT)
+
+    
+    # Start the event loop
+    root.mainloop()
+    
+    return selected_points_idx
 
 
 
@@ -373,13 +508,8 @@ def getSampleFrames(path, numberOfSamples=5, samplePeriod=5): # sample period de
         frameCount += 1
     return
 
-def processFrames(path:str, sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int=15):
+def processFrames(cam , sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int=15):
         sampledFrames = []
-
-        cam = cv2.VideoCapture(path)
-        if not cam.isOpened():
-            print("Unable to open video")
-            exit()
 
         fps = cam.get(cv2.CAP_PROP_FPS)
         totalFrameCount = cam.get(cv2.CAP_PROP_FRAME_COUNT)
@@ -487,8 +617,16 @@ def hasChanged_point(prevFrame: Frame, currentFrame: Frame):
     
 # This function splits and organizes the sample frames into SETS -> GAMES -> POINTS
 # it returns an organized list of match data
-def detectChangesAndSplitFrames(sampledFrames):
-    sets = [[[[sampledFrames[0], None], ] ] ] # [set[game[point[start_frame, stop_frame]]]
+def detectChangesAndSplitFrames(sampledFrames, fps, sampleTime):
+    generic_last_frame = Frame(
+                    count=int(sampleTime * fps),
+                    timestamp= sampleTime,
+                    fps=fps,
+                    data=sampledFrames[len(sampledFrames) - 1].data,
+                    image= sampledFrames[len(sampledFrames) - 1].image
+                )
+
+    sets = [[[[sampledFrames[0], generic_last_frame], ] ] ] # [set[game[point[start_frame, stop_frame]]]
     for i in range(1, len(sampledFrames)):
         if hasChanged_set(sampledFrames[i - 1], sampledFrames[i]):
 
@@ -502,7 +640,7 @@ def detectChangesAndSplitFrames(sampledFrames):
             sets[len(sets) - 1] = latestSet
 
             # ADD a new set
-            latestSet = [[[sampledFrames[i], None]]]
+            latestSet = [[[sampledFrames[i], generic_last_frame]]]
             sets.append(latestSet)
             
             continue
@@ -519,7 +657,7 @@ def detectChangesAndSplitFrames(sampledFrames):
             sets[len(sets) - 1] = latestSet
 
             # ADD THE NEW GAME
-            latestGame = [[sampledFrames[i], None]]
+            latestGame = [[sampledFrames[i], generic_last_frame]]
             latestSet.append(latestGame)
 
             # MODIFY THE LAST SET
@@ -538,7 +676,7 @@ def detectChangesAndSplitFrames(sampledFrames):
             sets[len(sets) - 1] = latestSet
 
             # ADD THE NEW POINT
-            latestPoint = [sampledFrames[i], None]
+            latestPoint = [sampledFrames[i], generic_last_frame]
             latestGame.append(latestPoint)
 
             # Modify the LATEST GAME
@@ -550,113 +688,6 @@ def detectChangesAndSplitFrames(sampledFrames):
             continue
     
     return sets
-
-
-# This function allows the user to select the clips which he will like to include in the selected reel
-# it takes in the organized set of Key point
-# returns a list of the indices of the selected key points or clips
-# output format :[(setIndex, gameIndex, pointIndex)]
-def select_clips(data):
-    selected_points_idx = []
-    
-    def on_set_select(set_idx):
-        global selected_set
-        selected_set = set_idx
-        
-        # Clear the games and points lists
-        games.delete(0, tk.END)
-        points.delete(0, tk.END)
-        
-        # Populate the games list
-        for game_idx in range(len(data[selected_set])):
-            games.insert(tk.END, f"game {game_idx+1}")
-        
-    def on_game_select(game_idx):
-        global selected_set, selected_game
-        
-        selected_game = game_idx
-        
-        # Clear the points list
-        points.delete(0, tk.END)
-        
-        # Populate the points list
-        for point_idx in range(len(data[selected_set][selected_game])):
-            pointStartTime = data[selected_set][selected_game][point_idx][0].classicTimestamp()
-            pointStopTime = data[selected_set][selected_game][point_idx][1].classicTimestamp()
-            points.insert(tk.END, f"{point_idx+1}. [{pointStartTime} - {pointStopTime}]")
-
-        
-    def on_point_select(point_idx):
-        global selected_set, selected_game
-        newPoint = (selected_set, selected_game, point_idx)
-        if not newPoint in selected_points_idx:
-            selected_points_idx.append((selected_set, selected_game, point_idx))
-        
-        chosen_points.delete(0, tk.END)
-        for (set_idx, game_idx, point_idx) in selected_points_idx:
-            pointStartTime = data[set_idx][game_idx][point_idx][0].classicTimestamp()
-            pointStopTime = data[set_idx][game_idx][point_idx][1].classicTimestamp()
-            chosen_points.insert(tk.END, f"[{pointStartTime} - {pointStopTime}]")
-                
-            # pointStartTime = data[][selected_game][point_idx][0].classicTimestamp()
-            # pointStopTime = data[selected_set][selected_game][point_idx][1].classicTimestamp()
-            # chosen_points.insert(tk.END, f"Set{point[0] + 1}/Game{point[1] + 1}/Point{point[2] + 1}")
-        
-    def on_okay():
-        print("Destroying root; Exiting")
-        root.destroy()
-    
-    root = tk.Tk()
-    root.title("Select Points")
-    
-    # Create the sets, games, and points lists
-    sets = tk.Listbox(root, width=15, height=25)
-    sets_label = tk.Label(root, text="SETS")
-    games = tk.Listbox(root, width=15, height=25)
-    games_label = tk.Label(root, text="GAMES")
-    points = tk.Listbox(root, width=25, height=25)
-    points_label = tk.Label(root, text="POINTS")
-    chosen_points = tk.Listbox(root, width=25, height=25)
-    chosen_points_label = tk.Label(root, text="SELECTED POINTS")
-
- 
-    # Populate the sets list and select the first set by default
-    for set_idx in range(len(data)):
-        sets.insert(tk.END, f"set {set_idx+1}")
-
-    selected_set = 0
-    sets.select_set(selected_set)
-    
-    # Bind the set select event
-    sets.bind("<<ListboxSelect>>", lambda e: on_set_select(sets.curselection()[0]))
-    
-    # Bind the game select event
-    games.bind("<<ListboxSelect>>", lambda e: on_game_select(games.curselection()[0]))
-    
-    # Bind the point select event
-    points.bind("<<ListboxSelect>>", lambda e: on_point_select(points.curselection()[0]))
-    
-
-    # Pack the widgets
-    sets_label.pack(padx=15, pady=15,side=tk.LEFT)
-    sets.pack(padx=15, pady=15,side=tk.LEFT)
-    games_label.pack(padx=5, pady=5,side=tk.LEFT)
-    games.pack(padx=5, pady=5,side=tk.LEFT)
-    points_label.pack(padx=5, pady=5,side=tk.LEFT)
-    points.pack(padx=5, pady=5,side=tk.LEFT)
-    chosen_points_label.pack(padx=5, pady=5,side=tk.LEFT)
-    chosen_points.pack(padx=15, pady=15,side=tk.LEFT)
-
-
-    # Create and pack the "OK" button
-    okay_button = tk.Button(root, text="OK", command=on_okay)
-    okay_button.pack(pady=5,side=tk.LEFT)
-
-    
-    # Start the event loop
-    root.mainloop()
-    
-    return selected_points_idx
 
 
 # This function generates the highlight reel from the selected clips
@@ -759,17 +790,24 @@ def run_app(user_input):
     video_path = user_input['src_file']
     log_data(f"Video path: {video_path}")
     output_dir_path = user_input['dst_directory']
+    log_data(f"output directory path: {output_dir_path}")
     pointOffset = user_input['point_offset']
     log_data(f"point offset: {pointOffset}")
     oddGameOffset = user_input['odd_game_offset']
     log_data(f"odd game offset: {oddGameOffset}")
     log_data("\n")
+    cam = cv2.VideoCapture(video_path)
+    if not cam.isOpened():
+        print("Unable to open video")
+        exit()
+    fps = cam.get(cv2.CAP_PROP_FPS)
+
 
     # print("please select a video file")
     # video_path = select_video_file()
-    sampledFrames = processFrames( path= video_path, sampleTime= sampleTime, samplePeriod=samplePeriod)
+    sampledFrames = processFrames( cam= cam, sampleTime= sampleTime, samplePeriod=samplePeriod)
     print(f"edge_x: {[sampleFrame.data[2] for sampleFrame in sampledFrames]}")
-    matchData = detectChangesAndSplitFrames(sampledFrames)
+    matchData = detectChangesAndSplitFrames(sampledFrames=sampledFrames, fps=fps, sampleTime=sampleTime)
     selected_clips_idx = select_clips(matchData)
     clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = pointOffset, oddGameOffset=oddGameOffset,samplePeriod=samplePeriod )
     print(f'clip intervals: {clipIntervals}')
