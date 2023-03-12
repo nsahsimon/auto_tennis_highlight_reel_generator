@@ -1,3 +1,4 @@
+from copy import deepcopy
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
@@ -563,7 +564,10 @@ def processFrames(cam , sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int=15)
 
                 newFrame = Frame(
                     count=frameCount,
-                    timestamp= calcTimestamp(fps, frameCount),
+
+                    # calculating timestamp
+                    # samplePeriod / 2 is the correction factor
+                    timestamp= int(calcTimestamp(fps, frameCount) - samplePeriod / 2) if frameCount > 0 else calcTimestamp(fps, frameCount),
                     fps=fps,
                     data=newFrameData,
                     image = frame
@@ -633,9 +637,11 @@ def detectChangesAndSplitFrames(sampledFrames, fps, sampleTime, pointOffset, odd
                 )
 
     sets = [[[[sampledFrames[0], generic_last_frame], ] ] ] # [set[game[point[start_frame, stop_frame]]]
+    
+    # Organizing the sampledFrames into SETS -> GAMES -> POINTS
     for i in range(1, len(sampledFrames)):
-        if hasChanged_set(sampledFrames[i - 1], sampledFrames[i]):
 
+        if hasChanged_set(sampledFrames[i - 1], sampledFrames[i]):
             # ADD THE CLOSING FRAME OF THE LASTEST POINT
             latestSet = sets[len(sets) - 1]
             latestGame = latestSet[len(latestSet) - 1]
@@ -693,17 +699,37 @@ def detectChangesAndSplitFrames(sampledFrames, fps, sampleTime, pointOffset, odd
 
             continue
     
+
+    # return sets
     # Add offsets
     sets_with_offset = sets
+    is_new_set = False
+    is_odd_game = False
     for _set_idx, _set in enumerate(sets):
+        # sets_with_offset.append([])
+        is_new_set = True
         for _game_idx, _game in enumerate(_set):
+            # sets_with_offset[len(sets_with_offset) - 1].append([])
+            try:
+                player1GamesWonInSet = int(_game[0][0].data[0][0]) # Number of games won by player 1 in the current set
+                player2GamesWonInSet = int(_game[0][1].data[1][0]) # Number of games won by player 2 in the current set
+
+                # check if total number of games in set is odd
+                is_odd_game = (player1GamesWonInSet + player2GamesWonInSet) % 2  is 1 or (player1GamesWonInSet == 0 and player2GamesWonInSet == 0)
+            except:
+                is_odd_game = False
+
             for _point_idx, _point in enumerate(_game):
-                startFrame = _point[0]
-                stopFrame = _point[1]
-                (startTime, stopTime) = findEffectiveClipInterval(startFrame=startFrame, stopFrame=stopFrame, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
+                startFrame = deepcopy(_point[0])
+                stopFrame = deepcopy(_point[1])
+                (startTime, stopTime) = findEffectiveClipInterval(startFrame=startFrame, stopFrame=stopFrame, is_new_set=is_new_set, is_odd_game=is_odd_game, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
                 startFrame.setTimestamp(startTime)
-                stopFrame.setTimestamp(stopTime)
+                # stopFrame.setTimestamp(stopTime)
                 sets_with_offset[_set_idx][_game_idx][_point_idx] = (startFrame, stopFrame)
+
+                # reset flags
+                is_new_set = False
+                is_odd_game = False
 
     return sets_with_offset
 
@@ -753,29 +779,65 @@ def generateSubclipIntervals(data: list, subclipIndices: list, pointOffset: int 
     return sortedClipIntervals
 
 
-def findEffectiveClipInterval(startFrame: Frame, stopFrame: Frame, pointOffset: int = 15 , oddGameOffset: int = 70, samplePeriod: int = 5):
+def findEffectiveClipInterval(startFrame: Frame, stopFrame: Frame, is_new_set: bool, is_odd_game: bool, pointOffset: int = 15 , oddGameOffset: int = 70, samplePeriod: int = 5):
     start_time = startFrame.timestamp 
     stop_time = stopFrame.timestamp
-    is_odd_game = False
+    clip_interval = stop_time  - start_time
+
     _odd_game_offset = 0
     _point_offset = 0
+    _new_set_offset = 0
 
-    try:
-        player1GamesWonInSet = int(startFrame.data[0][0]) # Number of games won by player 1 in the current set
-        player2GamesWonInSet = int(startFrame.data[1][0]) # Number of games won by player 2 in the current set
 
-        # check if total number of games in set is odd
-        # or a new set is starting
-        is_odd_game = (player1GamesWonInSet + player2GamesWonInSet) % 2  is 1 or (player1GamesWonInSet == 0 and player2GamesWonInSet == 0)
-    except:
-        is_odd_game = False
+    def output():
+        return (start_time + _point_offset + _odd_game_offset + _new_set_offset, stop_time)
 
-    # if is_odd_game:
-    #     # if oddGameOffset -  3 * samplePeriod // 2 >= 0:
-    #         _odd_game_offset = oddGameOffset + 3 * samplePeriod // 2
-    # else:
-    #     # if pointOffset - samplePeriod >= 0:
-    #         _point_offset = pointOffset + samplePeriod
+    # 1. Check for a new set
+    # if a new set is found, offset by oddGameOffset
+ 
+   
+    if is_new_set:
+        if clip_interval - oddGameOffset > 15:
+            _new_set_offset = oddGameOffset
+            return output()
+        
+        elif clip_interval > 20:
+            _new_set_offset = clip_interval - 20
+            return output()
+
+        elif clip_interval - pointOffset > 15:
+            _new_set_offset = pointOffset
+            return output()
+        
+        else:
+            return output()
+        
+    elif is_odd_game:
+
+        if clip_interval - oddGameOffset > 15:
+            _odd_game_offset = oddGameOffset
+            return output()
+        
+        elif clip_interval > 20:
+            _odd_game_offset = clip_interval - 20
+            return output()
+        
+        elif clip_interval - pointOffset > 15:
+            _odd_game_offset = pointOffset
+            return output()
+
+        else: 
+            return output()
+    else:
+        if clip_interval - pointOffset > 10:
+            _point_offset = pointOffset
+            return output()
+        elif clip_interval > 15:
+            _point_offset = clip_interval - 20
+            return output()
+        else:
+            return output()
+        
 
     if is_odd_game:
         _odd_game_offset = oddGameOffset
@@ -793,7 +855,7 @@ def findEffectiveClipInterval(startFrame: Frame, stopFrame: Frame, pointOffset: 
     if _point_offset >= clipInterval:
         _point_offset = 0
     
-    return (start_time + _point_offset + _odd_game_offset, stop_time)
+    return (start_time + _point_offset + _odd_game_offset + _new_set_offset, stop_time)
 
 
 # Calculates and returns the timestamp of a frame given the: Frame rate (fps) and Frame number or count(count)
