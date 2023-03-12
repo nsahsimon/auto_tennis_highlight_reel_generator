@@ -16,6 +16,7 @@ import paddleocr
 from PIL import Image, ImageDraw, ImageFont
 import math
 import shutil
+from multiprocessing import Pool
 
 SET_CHANGE_THRESH = 10
 POINT_TIME_OFFSET = 15
@@ -383,13 +384,27 @@ def select_clips(data):
         
         chosen_points.delete(0, tk.END)
         for (set_idx, game_idx, point_idx) in selected_points_idx:
-            pointStartTime = data[set_idx][game_idx][point_idx][0].classicTimestamp()
-            pointStopTime = data[set_idx][game_idx][point_idx][1].classicTimestamp()
-            chosen_points.insert(tk.END, f"[{pointStartTime} - {pointStopTime}]")
+            point_of_interest = data[set_idx][game_idx][point_idx]
+            pointStartTime = point_of_interest[0].classicTimestamp()
+            pointStopTime = point_of_interest[1].classicTimestamp()
+            player1_points = point_of_interest[0].data[0][1]
+            player2_points = point_of_interest[0].data[1][1]
+            chosen_points.insert(tk.END, f"({player1_points} - {player2_points}) | ({pointStartTime} - {pointStopTime})")
                 
-            # pointStartTime = data[][selected_game][point_idx][0].classicTimestamp()
-            # pointStopTime = data[selected_set][selected_game][point_idx][1].classicTimestamp()
-            # chosen_points.insert(tk.END, f"Set{point[0] + 1}/Game{point[1] + 1}/Point{point[2] + 1}")
+    
+    def on_chosen_point_double_click(event):
+        chosen_point_idx = chosen_points.curselection()[0]
+        selected_points_idx.pop(chosen_point_idx)
+
+        chosen_points.delete(0, tk.END)
+        for (set_idx, game_idx, point_idx) in selected_points_idx:
+            point_of_interest = data[set_idx][game_idx][point_idx]
+            pointStartTime = point_of_interest[0].classicTimestamp()
+            pointStopTime = point_of_interest[1].classicTimestamp()
+            player1_points = point_of_interest[0].data[0][1]
+            player2_points = point_of_interest[0].data[1][1]
+            chosen_points.insert(tk.END, f"({player1_points} - {player2_points}) | ({pointStartTime} - {pointStopTime})")
+
         
     def on_okay():
         print("Destroying root; Exiting")
@@ -403,9 +418,9 @@ def select_clips(data):
     sets_label = tk.Label(root, text="SETS")
     games = tk.Listbox(root, width=15, height=25)
     games_label = tk.Label(root, text="GAMES")
-    points = tk.Listbox(root, width=40, height=25)
+    points = tk.Listbox(root, width=30, height=25)
     points_label = tk.Label(root, text="POINTS")
-    chosen_points = tk.Listbox(root, width=25, height=25)
+    chosen_points = tk.Listbox(root, width=30, height=25)
     chosen_points_label = tk.Label(root, text="SELECTED POINTS")
 
  
@@ -424,6 +439,9 @@ def select_clips(data):
     
     # Bind the point select event
     points.bind("<<ListboxSelect>>", lambda e: on_point_select(points.curselection()[0]))
+
+    # Bind the chosen points delete event
+    chosen_points.bind("<Double-1>", on_chosen_point_double_click)
     
 
     # Pack the widgets
@@ -791,43 +809,34 @@ def findEffectiveClipInterval(startFrame: Frame, stopFrame: Frame, is_new_set: b
 
     def output():
         return (start_time + _point_offset + _odd_game_offset + _new_set_offset, stop_time)
-
-    # 1. Check for a new set
-    # if a new set is found, offset by oddGameOffset
  
    
     if is_new_set:
         if clip_interval - oddGameOffset > 15:
             _new_set_offset = oddGameOffset
             return output()
-        
         elif clip_interval > 20:
             _new_set_offset = clip_interval - 20
             return output()
-
         elif clip_interval - pointOffset > 15:
             _new_set_offset = pointOffset
             return output()
-        
         else:
             return output()
         
     elif is_odd_game:
-
         if clip_interval - oddGameOffset > 15:
             _odd_game_offset = oddGameOffset
             return output()
-        
         elif clip_interval > 20:
             _odd_game_offset = clip_interval - 20
             return output()
-        
         elif clip_interval - pointOffset > 15:
             _odd_game_offset = pointOffset
             return output()
-
         else: 
             return output()
+        
     else:
         if clip_interval - pointOffset > 10:
             _point_offset = pointOffset
@@ -908,11 +917,5 @@ def run_app(user_input, progress_bar, window):
     print(f"Number of points: {sum([ sum([len(game) for game in set]) for set in matchData])}")
 
 
-# run_app()
-
-
 get_user_input()
-
-
-# test()
 
