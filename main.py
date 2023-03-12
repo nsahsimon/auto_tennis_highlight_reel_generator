@@ -46,6 +46,9 @@ class Frame:
     def setEdge_x(self, edge_x):
         self.data[2] = edge_x
 
+    def setTimestamp(self, new_timestamp):
+        self.timestamp = new_timestamp
+
 
 # IMPORTANT OCR FUNCTIONS
 def extractScoreBoard(image):
@@ -142,7 +145,6 @@ def sortTexts(txts, boxes):
     return [txt_box[0] for txt_box in txt_boxes]
 
 
-
 def extractFrameData(src, ocr):
     image = extractScoreBoard(src)
     original = image
@@ -189,10 +191,10 @@ def test():
 def get_user_input():
 
     user_input = {}
-    progress_bar  = None
+    # global progress_bar; progress_bar = None
     
     # Create the main window
-    window = tk.Tk()
+    global window ; window = tk.Tk()
     window.title("Input Information")
     # Set the size of the window to 500x300 pixels
     window.geometry("512x640")
@@ -206,8 +208,8 @@ def get_user_input():
         user_input['src_file'] = video_file_path
         src_video_entry.config(textvariable=tk.StringVar(value=f"{video_file_path}"))
 
-    submit_button = tk.Button(window, text="Choose a video", command=choose_src_file)
-    submit_button.pack(pady=10)
+    choose_src_button = tk.Button(window, text="Choose a video", command=choose_src_file)
+    choose_src_button.pack(pady=10)
 
 
     # Create the labels and text fields for each input
@@ -240,13 +242,14 @@ def get_user_input():
         user_input['dst_directory'] = output_directory
         dst_video_entry.config(textvariable=tk.StringVar(value=f"{output_directory}"))
 
-    submit_button = tk.Button(window, text="Choose output directory", command=choose_output_dir)
-    submit_button.pack(pady=10)
+    choose_output_button = tk.Button(window, text="Choose output directory", command=choose_output_dir)
+    choose_output_button.pack(pady=10)
 
     def run_app_local():
-        run_app(user_input=user_input)
-        progress_bar.stop()
-        window.destroy()
+        # progress_bar.stop()
+        # window.destroy()
+        run_app(user_input=user_input, progress_bar=progress_bar, window=window)
+
 
     def start_background_process():
         # Disable the submit button and text fields
@@ -259,7 +262,7 @@ def get_user_input():
         tk.Label(window, text="Processing video. Please wait....").pack(pady=20)
 
         # Set up the progress bar
-        progress_bar = ttk.Progressbar(window, orient="horizontal",maximum=100, mode='indeterminate')
+        global progress_bar; progress_bar = ttk.Progressbar(window, orient="horizontal",maximum=100, mode='indeterminate')
         progress_bar.pack(pady=20)
         progress_bar.start()
         window.after(5000, lambda : run_app_local())
@@ -368,7 +371,7 @@ def select_clips(data):
             pointStopTime = point_of_interest[1].classicTimestamp()
             player1_points = point_of_interest[0].data[0][1]
             player2_points = point_of_interest[0].data[1][1]
-            points.insert(tk.END, f"{point_idx+1}. {'<longest>' if point_idx == longest_point_idx else ''} ({player1_points} - {player2_points}) | ({pointStartTime} - {pointStopTime})")
+            points.insert(tk.END, f"{point_idx+1}. {'**' if point_idx == longest_point_idx else ''} ({player1_points} - {player2_points}) | ({pointStartTime} - {pointStopTime})")
 
         
     def on_point_select(point_idx):
@@ -399,7 +402,7 @@ def select_clips(data):
     sets_label = tk.Label(root, text="SETS")
     games = tk.Listbox(root, width=15, height=25)
     games_label = tk.Label(root, text="GAMES")
-    points = tk.Listbox(root, width=25, height=25)
+    points = tk.Listbox(root, width=40, height=25)
     points_label = tk.Label(root, text="POINTS")
     chosen_points = tk.Listbox(root, width=25, height=25)
     chosen_points_label = tk.Label(root, text="SELECTED POINTS")
@@ -444,27 +447,13 @@ def select_clips(data):
     return selected_points_idx
 
 
-
-
-
-
-
-# Load paddle ocr
-OCR = paddleocr.PaddleOCR(lang='en')
-def log_data(data):
-    with open(LOG_FILENAME, 'a') as file:
-        file.write(f"{data} \n")
-
-def del_prev_log():
-    if os.path.exists(LOG_FILENAME):
-        os.remove(LOG_FILENAME)
-
 def select_video_file():
     root = tk.Tk()
     root.withdraw()
     file_path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4;*.mov;*.avi;*.mkv")], title="Select a video")
     root.destroy()
     return file_path
+
 
 def select_directory():
     # Create a tkinter window
@@ -479,6 +468,21 @@ def select_directory():
 
     # Return the selected directory path
     return directory_path
+
+
+
+
+
+
+# Load paddle ocr
+OCR = paddleocr.PaddleOCR(lang='en')
+def log_data(data):
+    with open(LOG_FILENAME, 'a') as file:
+        file.write(f"{data} \n")
+
+def del_prev_log():
+    if os.path.exists(LOG_FILENAME):
+        os.remove(LOG_FILENAME)
 
 def getSampleFrames(path, numberOfSamples=5, samplePeriod=5): # sample period defines how often video frames should be sampled.
     cam = cv2.VideoCapture(path)
@@ -556,8 +560,6 @@ def processFrames(cam , sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int=15)
                     # update previous frame data
                     prevFrameData = newFrameData
 
-                log_data(newFrameData)
-                print(f"edge_x: {newFrameData[2]}")
 
                 newFrame = Frame(
                     count=frameCount,
@@ -566,6 +568,10 @@ def processFrames(cam , sampleTime:int=DEFAULT_SAMPLE_TIME, samplePeriod:int=15)
                     data=newFrameData,
                     image = frame
                 )
+
+                log_data(f"""{newFrame.data} at ({newFrame.classicTimestamp()}) """)
+
+                print(f"edge_x: {newFrameData[2]}")
 
                 sampledFrames.append(newFrame)
                 sampleCount += 1
@@ -616,8 +622,8 @@ def hasChanged_point(prevFrame: Frame, currentFrame: Frame):
         return False
     
 # This function splits and organizes the sample frames into SETS -> GAMES -> POINTS
-# it returns an organized list of match data
-def detectChangesAndSplitFrames(sampledFrames, fps, sampleTime):
+# It returns an organized list of match data
+def detectChangesAndSplitFrames(sampledFrames, fps, sampleTime, pointOffset, oddGameOffset, samplePeriod):
     generic_last_frame = Frame(
                     count=int(sampleTime * fps),
                     timestamp= sampleTime,
@@ -687,7 +693,19 @@ def detectChangesAndSplitFrames(sampledFrames, fps, sampleTime):
 
             continue
     
-    return sets
+    # Add offsets
+    sets_with_offset = sets
+    for _set_idx, _set in enumerate(sets):
+        for _game_idx, _game in enumerate(_set):
+            for _point_idx, _point in enumerate(_game):
+                startFrame = _point[0]
+                stopFrame = _point[1]
+                (startTime, stopTime) = findEffectiveClipInterval(startFrame=startFrame, stopFrame=stopFrame, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
+                startFrame.setTimestamp(startTime)
+                stopFrame.setTimestamp(stopTime)
+                sets_with_offset[_set_idx][_game_idx][_point_idx] = (startFrame, stopFrame)
+
+    return sets_with_offset
 
 
 # This function generates the highlight reel from the selected clips
@@ -726,7 +744,9 @@ def generateSubclipIntervals(data: list, subclipIndices: list, pointOffset: int 
         point_idx = subclipIdx[2]
         startFrame = data[set_idx][game_idx][point_idx][0] 
         stopFrame = data[set_idx][game_idx][point_idx][1]
-        (startTime, stopTime) = findEffectiveClipInterval(startFrame=startFrame, stopFrame=stopFrame, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
+        startTime = startFrame.timestamp
+        stopTime = stopFrame.timestamp
+        # (startTime, stopTime) = findEffectiveClipInterval(startFrame=startFrame, stopFrame=stopFrame, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
         unsortedClipIntervals.append((startTime , stopTime))
     
     sortedClipIntervals = sorted(unsortedClipIntervals, key=lambda interval : interval[0])
@@ -781,7 +801,7 @@ def calcTimestamp(fps: float, count: int):
     return int (count / fps)       
 
 
-def run_app(user_input):
+def run_app(user_input, progress_bar, window):
     del_prev_log()
     sampleTime = user_input['video_duration']
     log_data(f"Sample time: {sampleTime}")
@@ -805,9 +825,11 @@ def run_app(user_input):
 
     # print("please select a video file")
     # video_path = select_video_file()
-    sampledFrames = processFrames( cam= cam, sampleTime= sampleTime, samplePeriod=samplePeriod)
+    sampledFrames = processFrames(cam= cam, sampleTime= sampleTime, samplePeriod=samplePeriod)
     print(f"edge_x: {[sampleFrame.data[2] for sampleFrame in sampledFrames]}")
-    matchData = detectChangesAndSplitFrames(sampledFrames=sampledFrames, fps=fps, sampleTime=sampleTime)
+    matchData = detectChangesAndSplitFrames(sampledFrames=sampledFrames, fps=fps, sampleTime=sampleTime, pointOffset=pointOffset, oddGameOffset=oddGameOffset, samplePeriod=samplePeriod)
+    progress_bar.stop()
+    window.destroy()
     selected_clips_idx = select_clips(matchData)
     clipIntervals = generateSubclipIntervals(data=matchData, subclipIndices=selected_clips_idx, pointOffset = pointOffset, oddGameOffset=oddGameOffset,samplePeriod=samplePeriod )
     print(f'clip intervals: {clipIntervals}')
@@ -826,7 +848,9 @@ def run_app(user_input):
 
 # run_app()
 
+
 get_user_input()
+
 
 # test()
 
