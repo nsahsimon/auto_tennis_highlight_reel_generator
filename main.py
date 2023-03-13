@@ -770,7 +770,7 @@ def generateReel(src_path: str, dst_path: str, subclipIntervals: list):
     final_clip = concatenate_videoclips(subclips)
 
     # Save the final clip
-    final_clip.write_videofile(dst_path)
+    final_clip.write_videofile(dst_path, codec='libx264', audio_codec='aac')
 
     return
 
